@@ -1,5 +1,5 @@
-export async function * lookahead (head = 1, source, mapper) {
-	const buffer = []
+export async function * lookahead<S, M> (head = 1, source: AsyncIterable<S>, mapper: (s: S) => Promise<M>) {
+	const buffer: Array<Promise<M>> = []
 	for await (const item of source) {
 		if (buffer.length >= head) {
 			const mapped = await buffer.shift()
@@ -12,47 +12,29 @@ export async function * lookahead (head = 1, source, mapper) {
 	}
 }
 
-export async function * uflatmap<S, M> (workers = 1, source: AsyncIterable<S>, mapper: (s) => AsyncIterable<M>): AsyncIterable<M> {
-	const wip = new Set<Buffer<M>>()
-	let done = false
+export function uflatmap<S, M> (workers = 1, source: AsyncIterable<S>, mapper: (s) => AsyncIterable<M>): AsyncIterable<M> {
+	const wip = new Set<Promise<void>>()
+	const buffer = new AsyncBuffer<M>()
 
 	startMapping()
-	while (!done) {
-		await delay(2)
-		yield * consumeWip()
-	}
-	while (wip.size > 0) {
-		await delay(2)
-		yield * consumeWip()
-	}
-
-	async function * consumeWip () {
-		for (const w of wip) {
-			const items = w.flush()
-			for (const i of items) yield i
-			if (w.isDone()) {
-				wip.delete(w)
-			}
-		}
-	}
+	return buffer.read()
 
 	async function startMapping () {
 		for await (const s of source) {
 			while (wip.size >= workers) {
-				await delay(5)
+				await Promise.race(wip)
 			}
-			const buffer = new Buffer<M>(10)
-			mapInto(s, buffer)
-			wip.add(buffer)
+			const worker = mapFrom(s).then(() => wip.delete(worker))
+			wip.add(worker)
 		}
-		done = true
+		await Promise.all(wip)
+		buffer.done()
 	}
 
-	async function mapInto (source, buffer) {
+	async function mapFrom (source) {
 		for await (const m of mapper(source)) {
 			await buffer.write(m)
 		}
-		buffer.done()
 	}
 }
 
@@ -76,23 +58,30 @@ export function delay (ms) {
 	})
 }
 
-class Buffer<T> {
+class AsyncBuffer<T> {
 	private _done = false
 	private buffer: T[] = []
 	private size: number
+	private pendingWrites: Deferred<void>[] = []
+	private pendingRead?: Deferred<void>
 	constructor (size = 10) {
 		this.size = size
 	}
 
 	async write (v: T): Promise<void> {
-		while (this.buffer.length >= this.size) {
-			await delay(5)
+		if (this.buffer.length < this.size) {
+			this.buffer.push(v)
+			this.pendingRead.resolve()
+		} else {
+			const d = new Deferred<void>()
+			this.pendingWrites.push(d)
+			await d.promise
 		}
-		this.buffer.push(v)
 	}
 
 	done () {
 		this._done = true
+		if (this.pendingRead) this.pendingRead.resolve()
 	}
 
 	isDone () {
@@ -102,16 +91,23 @@ class Buffer<T> {
 	flush () {
 		const toflush = [...this.buffer]
 		this.buffer = []
+		for (const _ of toflush) {
+			if (this.pendingWrites.length === 0) { break }
+			this.pendingWrites.shift().resolve()
+		}
 		return toflush
 	}
 
 	async * read () {
 		while (!this._done) {
 			while (this.buffer.length) {
-				yield this.buffer.shift()
+				const v = this.buffer.shift()
+				if (this.pendingWrites.length) this.pendingWrites.shift().resolve()
+				yield v
 			}
-			while (this.buffer.length === 0) {
-				await delay(5)
+			if (!this._done) {
+				this.pendingRead = new Deferred()
+				await this.pendingRead.promise
 			}
 		}
 	}

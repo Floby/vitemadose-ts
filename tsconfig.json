@@ -1,6 +1,7 @@
 {
     "compilerOptions": {
         "types": ["mocha", "node"],
+				"resolveJsonModule": true,
         "outDir": "./dist",
         "esModuleInterop": true,
         "target": "ES2020",

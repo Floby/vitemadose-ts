@@ -22,13 +22,22 @@
   "homepage": "https://github.com/DNUM-SocialGouv/1j1s-api#readme",
   "dependencies": {
     "axios": "^0.27.2",
-    "uuid": "^8.3.2"
+    "chalk": "^4.1.2",
+    "csv-parse": "^5.3.0",
+    "humanize-duration": "^3.27.2",
+    "luxon": "^3.0.1",
+    "path-to-regexp": "^6.2.1",
+    "uuid": "^8.3.2",
+    "yaml": "^2.1.1",
+    "yargs": "^17.5.1"
   },
   "devDependencies": {
     "@types/chai": "^4.3.1",
     "@types/chai-uuid": "^1.0.2",
+    "@types/luxon": "^3.0.0",
     "@types/mocha": "^9.1.1",
     "@types/uuid": "^8.3.4",
+    "@types/yargs": "^17.0.11",
     "@typescript-eslint/eslint-plugin": "^5.30.5",
     "@typescript-eslint/parser": "^5.30.5",
     "chai": "^4.3.6",

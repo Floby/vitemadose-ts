@@ -43,7 +43,7 @@ describe('uflatmap(workers, source, mapper)', () => {
 		})
 	})
 	context('when mapper takes different times for each mapping', () => {
-		it('returns an iterable with the mapper contents for each element', async () => {
+		it('returns an iterable with the mapper contents for each element in arriving order', async () => {
 			// Given
 			const source = aiter([10, 8])
 			async function * mapper (i: number) {
@@ -56,6 +56,20 @@ describe('uflatmap(workers, source, mapper)', () => {
 			const actual = await collect(uflatmap(2, source, mapper))
 			// Then
 			expect(actual).to.deep.equal([8, 10, 16, 20])
+		})
+		it('does not suffer HOL blocking', async () => {
+			// Given
+			const source = aiter([20, 1, 2])
+			async function * mapper (i: number) {
+				await delay(i)
+				yield i
+				await delay(i)
+				yield i
+			}
+			// When
+			const actual = await collect(uflatmap(2, source, mapper))
+			// Then
+			expect(actual).to.deep.equal([1, 1, 2, 2, 20, 20])
 		})
 	})
 })

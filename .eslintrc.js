@@ -6,7 +6,8 @@ module.exports = {
 	},
 	extends: [
 		'standard',
-		'plugin:chai-friendly/recommended'
+		'plugin:chai-friendly/recommended',
+		'plugin:@typescript-eslint/recommended'
 	],
 	globals: {
 		Atomics: 'readonly',
@@ -26,6 +27,9 @@ module.exports = {
 		indent: ['error', 'tab'],
 		'no-tabs': 'off',
 		'no-console': 'error',
-		'mocha/no-exclusive-tests': 'error'
+		'mocha/no-exclusive-tests': 'error',
+		'no-use-before-define': 'off',
+		'@typescript-eslint/no-use-before-define': ['error', { typedefs: false, functions: false }],
+		'@typescript-eslint/no-namespace': 'off'
 	}
 }
