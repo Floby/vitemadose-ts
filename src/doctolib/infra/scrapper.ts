@@ -2,17 +2,20 @@
 import Axios, { AxiosInstance, AxiosResponse } from 'axios'
 import QS from 'querystring'
 import YAML from 'yaml'
+import Http from 'http'
+import Https from 'https'
 import FS from 'fs'
 import Path from 'path'
-import { DateTime } from 'luxon'
+import { DateTime, Interval } from 'luxon'
 import { Créneau } from '../../domain/Créneau'
 import { Lieu } from '../../domain/Lieu'
 import { Départements, Département } from '../../domain/Département'
-import { lookahead, step, uflatmap } from '../../domain/iterators'
+import { lookahead, step, toAsyncIt, uflatmap } from '../../domain/iterators'
 import { match as routeMatch } from 'path-to-regexp'
 import { Issue } from '../../domain/Issue'
 
 const CONFIG = YAML.parse(FS.readFileSync(Path.join(__dirname, 'config.yaml'), 'utf8'))
+const COOLDOWN = 1
 
 interface Centre {
 	id: string
@@ -30,7 +33,7 @@ interface DateRange {
   to: string
 }
 
-interface DoctolibCentre extends Centre {
+export interface DoctolibCentre extends Centre {
 	url: string
 	id: string
 	gid?: string
@@ -38,13 +41,15 @@ interface DoctolibCentre extends Centre {
 }
 
 interface CréneauxScrapper<C extends Centre> {
-	trouverLesCréneaux(centre: C, range: DateRange): AsyncGenerator<Créneau | Issue>
+	trouverLesCréneaux(centre: C, range: Interval): AsyncGenerator<Créneau | Issue>
 }
 
-export class DoctolibCréneauxScrapper implements CréneauxScrapper<DoctolibCentre> {
+export class DoctolibScrapper implements CréneauxScrapper<DoctolibCentre> {
 	private client: AxiosInstance
 	constructor (private config = CONFIG) {
 		this.client = Axios.create({
+			httpAgent: new Http.Agent({ keepAlive: true, maxSockets: 100 }),
+			httpsAgent: new Https.Agent({ keepAlive: true, maxSockets: 100 }),
 			baseURL: 'https://partners.doctolib.fr',
 			headers: {
 				'User-Agent': '<censored>',
@@ -53,7 +58,7 @@ export class DoctolibCréneauxScrapper implements CréneauxScrapper<DoctolibCent
 		})
 	}
 
-	public async * trouverLesCréneaux (centre: DoctolibCentre, range: DateRange): AsyncGenerator<Créneau | Issue> {
+	public async * trouverLesCréneaux (centre: DoctolibCentre, range: Interval): AsyncGenerator<Créneau | Issue> {
 		try {
 			const { data } = await this.get(`/booking/${centre.id}.json`)
 			const json = data.data
@@ -64,27 +69,45 @@ export class DoctolibCréneauxScrapper implements CréneauxScrapper<DoctolibCent
 			const motives = this.motives(data.data.visit_motives)
 			if (isEmpty(motives)) { return }
 
-			const agendas = MapAsId(data.data.agendas.filter((a) => a.visit_motive_ids.some((id) => (id in motives))))
-			const practices = Object.values(agendas).map((a: any) => a.practice_id).filter(Boolean)
+			const agendas = this.agendas(data.data.agendas, motives)
+			const practices = this.practices(agendas)
 			if (!practices.length) {
 				return yield new Issue('No practice found for motives', { centre, json })
 			}
 
 			const lieu = this.lieuFromCentre(centre)
-			for await (const slot of this.timetable({ range, motives, agendas, practices, json })) {
+			const ranges = range.splitBy({ day: 15 })
+			for await (const slot of uflatmap(2, ranges, (range) => this.timetable({ range, motives, agendas, practices, json }))) {
 				if (slot instanceof Issue) { yield slot; continue }
-				const motive = slot.steps ? motives[slot.steps[0].visit_motive_id] : [...Object.values(motives)][0]
+				const nslot = this.normalizeSlot(slot, motives)
 				yield {
-					vaccin: motive.vaccin,
-					dose: motive.dose,
-					horaire: DateTime.fromISO(slot.start_date),
-					réservationUrl: 'https://doctolib.fr',
+					vaccin: nslot.motive.vaccin,
+					dose: nslot.motive.dose,
+					horaire: DateTime.fromISO(nslot.start_date),
+					réservationUrl: 'https://doctolib.fr', // TODO actual URL
 					lieu
 				}
 			}
 		} catch (error) {
 			console.error(error)
 			throw error
+		}
+	}
+
+	private agendas (agendas: Agenda[], motives: Indexed<Motive>) {
+		return MapAsId(agendas.filter((a) => a.visit_motive_ids.some((id) => (id in motives))))
+	}
+
+	private practices (agendas: Indexed<Agenda>) {
+		return Object.values(agendas).map((a) => a.practice_id).filter(Boolean)
+	}
+
+	private normalizeSlot (slot, motives) {
+		const motive = slot.steps ? motives[slot.steps[0].visit_motive_id] : [...Object.values(motives)][0]
+		if (typeof slot === 'string') {
+			return { start_date: slot, motive }
+		} else {
+			return { start_date: slot.start_date, motive }
 		}
 	}
 
@@ -105,13 +128,13 @@ export class DoctolibCréneauxScrapper implements CréneauxScrapper<DoctolibCent
 		let availabilities
 		try {
 			const { data } = await this.get('/availabilities.json', {
-				start_date: range.from,
+				start_date: range.start.toISODate(),
 				visit_motive_ids: Object.keys(motives).join('-'),
 				agenda_ids: Object.keys(agendas).join('-'),
 				practice_ids: practices.join('-'),
 				insurance_sector: 'public',
 				destroy_temporary: 'true',
-				limit: 7
+				limit: Math.floor(range.toDuration().as('days'))
 			})
 			availabilities = data.availabilities
 		} catch (e) {
@@ -126,37 +149,8 @@ export class DoctolibCréneauxScrapper implements CréneauxScrapper<DoctolibCent
 		}
 	}
 
-	async get (url: string, query?): Promise<AxiosResponse> {
-		if (query) {
-			url += `?${QS.stringify(query)}`
-		}
-		const start = Date.now()
-		let response: AxiosResponse
-		try {
-			response = await this.client.get(url)
-			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
-			return response
-		} catch (e) {
-			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
-			throw e
-		}
-	}
-
 	private lieuFromCentre (centre: DoctolibCentre): Lieu {
 		return centre as unknown as Lieu
-	}
-}
-
-export class DoctolibCenterScrapper {
-	private client: AxiosInstance
-	constructor (private config = CONFIG) {
-		this.client = Axios.create({
-			baseURL: 'https://partners.doctolib.fr',
-			headers: {
-				'User-Agent': '<censored>',
-				Accept: 'application/json'
-			}
-		})
 	}
 
 	async * trouverLesCentres (): AsyncIterable<DoctolibCentre> {
@@ -185,7 +179,7 @@ export class DoctolibCenterScrapper {
 				return { data: {} }
 			})
 
-		for await (const response of lookahead(2, toAsyncIt(step(1)), getPage)) {
+		for await (const response of lookahead(3, toAsyncIt(step(1)), getPage)) {
 			const doctors = response?.data?.data?.doctors
 			if (doctors?.length) {
 				yield * doctors
@@ -197,7 +191,7 @@ export class DoctolibCenterScrapper {
 
 	private static MATCH_LINK = routeMatch<Record<'spec'|'ville'|'id', string>>('/:spec/:ville/:id')
 	private matchLink (link: string): Record<'spec'|'ville'|'id', string> | undefined {
-		const match = DoctolibCenterScrapper.MATCH_LINK(link)
+		const match = DoctolibScrapper.MATCH_LINK(link)
 		if (match) {
 			return match.params
 		}
@@ -219,6 +213,7 @@ export class DoctolibCenterScrapper {
 		try {
 			response = await this.client.get(url)
 			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
+			await delay(COOLDOWN)
 			return response
 		} catch (e) {
 			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
@@ -227,15 +222,22 @@ export class DoctolibCenterScrapper {
 	}
 }
 
-function MapAsId<T extends { id: string }> (items: T[]): {[key: string]: T} {
+function MapAsId<T extends { id: string }> (items: T[]): Indexed<T> {
 	return items.reduce((map, item) => ({ ...map, [item.id]: item }), {})
-}
-async function * toAsyncIt<T> (it: Iterable<T>): AsyncIterable<T> {
-	for (const i of it) {
-		yield i
-	}
 }
 
 function isEmpty<T extends object> (o: T): boolean {
 	return Object.keys(o).length === 0
 }
+
+function delay (ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+interface Agenda {
+	id: string
+	visit_motive_ids: Array<number|string>
+	practice_id: number|string|null
+}
+
+type Indexed<T extends { id: string }> = Record<string, T>

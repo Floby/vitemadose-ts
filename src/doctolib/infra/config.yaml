@@ -1,33 +1,5 @@
 ---
 motives:
-  7107:
-    dose: 1
-    vaccin: AstraZeneca
-
-  8741:
-    dose: 1
-    vaccin: AstraZeneca
-
-  6970:
-    dose: 1
-    vaccin: Pfizer-BioNTech
-
-  8739:
-    dose: 1
-    vaccin: Pfizer-BioNTech
-
-  8740:
-    dose: 1
-    vaccin: Moderna
-
-  7005:
-    dose: 1
-    vaccin: Moderna
-
-  7945:
-    dose: 1
-    vaccin: Janssen
-
   8192:
     dose: 3
     vaccin: Pfizer-BioNTech

@@ -12,7 +12,7 @@ export async function * lookahead<S, M> (head = 1, source: AsyncIterable<S>, map
 	}
 }
 
-export function uflatmap<S, M> (workers = 1, source: AsyncIterable<S>, mapper: (s) => AsyncIterable<M>): AsyncIterable<M> {
+export function uflatmap<S, M> (workers = 1, source: Iterable<S> | AsyncIterable<S>, mapper: (s) => AsyncIterable<M>): AsyncIterable<M> {
 	const wip = new Set<Promise<void>>()
 	const buffer = new AsyncBuffer<M>()
 
@@ -58,7 +58,7 @@ export function delay (ms) {
 	})
 }
 
-class AsyncBuffer<T> {
+export class AsyncBuffer<T> {
 	private _done = false
 	private buffer: T[] = []
 	private size: number
@@ -140,4 +140,17 @@ class Deferred<T> {
 
 	get complete () { return this._complete }
 	get error () { return this._error }
+}
+
+export async function * toAsyncIt<T> (it: Iterable<T>): AsyncIterable<T> {
+	for (const i of it) {
+		yield i
+	}
+}
+export async function collect<T> (iterator: AsyncIterable<T>): Promise<Array<T>> {
+	const buffer: T[] = []
+	for await (const item of iterator) {
+		buffer.push(item)
+	}
+	return buffer
 }

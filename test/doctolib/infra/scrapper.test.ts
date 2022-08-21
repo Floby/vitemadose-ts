@@ -1,9 +1,9 @@
 import { expect } from 'chai'
 import { DateTime } from 'luxon'
 import nock from 'nock'
-import { DoctolibCenterScrapper, DoctolibCréneauxScrapper } from '../../../src/doctolib/infra/scrapper'
+import { DoctolibScrapper } from '../../../src/doctolib/infra/scrapper'
 
-describe.skip('DoctolibCréneauxScrapper', () => {
+describe.skip('DoctolibScrapper', () => {
 	let doctolib
 	beforeEach(() => {
 		// doctolib = nock('https://www.doctolib.fr')
@@ -20,7 +20,7 @@ describe.skip('DoctolibCréneauxScrapper', () => {
 					url: 'https://www.doctolib.fr/centre-de-vaccinations-internationales/ville1/centre1?pid=practice-165752&enable_cookies_consent=1',
 					id: 'centre1'
 				}
-				const scrapper = new DoctolibCréneauxScrapper()
+				const scrapper = new DoctolibScrapper()
 				doctolib.get('/centre-de-vaccinations-internationales/ville1/centre1?pid=practice-165752&enable_cookies_consent=1').reply(404, 'not found')
 				// When
 				const actual = await collect(scrapper.trouverLesCréneaux(centre, range))
@@ -37,7 +37,7 @@ describe.skip('DoctolibCréneauxScrapper', () => {
 					id: 'centre-de-depistage-covid19-tests-antigeniques-granville',
 					practiceId: '154470'
 				}
-				const scrapper = new DoctolibCréneauxScrapper()
+				const scrapper = new DoctolibScrapper()
 				// doctolib.get('/vaccination-covid-19/boussac/centre-de-vaccination-msp-de-boussac?pid=practice-164636').reply(404, 'not found')
 				// When
 				const actual = await collect(scrapper.trouverLesCréneaux(centre, range))
@@ -46,15 +46,12 @@ describe.skip('DoctolibCréneauxScrapper', () => {
 			})
 		})
 	})
-})
-
-describe('DoctolibCenterScrapper', () => {
 	describe('.trouverLesCentres()', () => {
 		context("quand l'url retourne une 200", () => {
 			it('retourne un async iterator avec les centres', async function () {
 				// Given
 				this.timeout(Infinity)
-				const scrapper = new DoctolibCenterScrapper()
+				const scrapper = new DoctolibScrapper()
 				// When
 				const start = Date.now()
 				const actual = await collect(scrapper.trouverLesCentres())
