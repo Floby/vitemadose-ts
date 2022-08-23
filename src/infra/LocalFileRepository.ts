@@ -2,10 +2,17 @@ import Path = require('path')
 import makeDir = require('make-dir')
 import Del = require('del')
 import FS from 'fs/promises'
-import { Meta, Repository } from '../domain/Repository'
+import { IteratorRepository, ActualIteratorRepository } from '../domain/IteratorRepository'
 import split2 from 'split2'
 
-export class LocalFileRepository<I extends object, M extends Meta> implements Repository<I, M> {
+export class LocalFileRepository implements IteratorRepository {
+	constructor (private directory: string) {}
+
+	prefix<T extends object, M extends object> (prefix: string): ConcreteLocalFileRepository<T, M> {
+		return new ConcreteLocalFileRepository<T, M>(Path.join(this.directory, prefix))
+	}
+}
+export class ConcreteLocalFileRepository<I extends object, M extends object> implements ActualIteratorRepository<I, M> {
 	constructor (private directory: string) {}
 
 	async write (key: string, meta: M, source: AsyncIterable<I>): Promise<void> {

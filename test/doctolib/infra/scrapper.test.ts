@@ -1,5 +1,5 @@
 import { expect } from 'chai'
-import { DateTime } from 'luxon'
+import { DateTime, Interval } from 'luxon'
 import nock from 'nock'
 import { DoctolibScrapper } from '../../../src/doctolib/infra/scrapper'
 
@@ -9,10 +9,7 @@ describe.skip('DoctolibScrapper', () => {
 		// doctolib = nock('https://www.doctolib.fr')
 	})
 	describe('.trouverLesCréneaux(centre)', () => {
-		const range = {
-			from: DateTime.now().toISO().substr(0, 10),
-			to: DateTime.now().plus({ week: 1 }).toISO().substr(0, 10)
-		}
+		const range = Interval.fromDateTimes(DateTime.now(), DateTime.now().plus({ day: 7 }))
 		context("quand l'url retourne une 404", () => {
 			it.skip('retourn une async iterator vide', async () => {
 				// Given

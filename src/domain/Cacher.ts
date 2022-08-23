@@ -1,28 +1,41 @@
-import { DateTime } from 'luxon'
+import { DateTime, DurationLike } from 'luxon'
 import { AsyncBuffer } from './iterators'
-import { Repository } from './Repository'
+import { IteratorRepository } from './IteratorRepository'
 
-interface CacherMeta {
-	generatedAt: string
+interface CachéMeta {
+  expiresAt: string
 }
-export function Cacher<T extends object, P extends (...args: any[]) => AsyncIterable<T>> (repository: Repository<T, CacherMeta>, provider: P): (k: string, ...args: Parameters<typeof provider>) => AsyncIterable<T> {
-	return async function * get (key: string, ...args: Parameters<P>): AsyncIterable<T> {
-		const meta = await repository.meta(key)
-		if (meta) {
-			return yield * repository.read(key)
-		}
-		const source = provider(...args)
-		const toWrite = new AsyncBuffer<T>(10)
-		const writing = repository.write(key, { generatedAt: DateTime.now().toISO() }, toWrite.read())
-		for await (const item of source) {
-			try {
-				await toWrite.write(item)
-			} catch (e) {
-				console.error('GOT ERROR', e)
+export function Caché (repository: IteratorRepository): IterableCache {
+	return new IterableCache(repository)
+}
+
+export class IterableCache {
+	constructor (private repo: IteratorRepository) {}
+
+	wrap<T extends object> (key: string, policy: DurationLike, provider: Provider<T>): (...args: Parameters<typeof provider>) => AsyncIterable<T> {
+		const repo = this.repo.prefix<T, CachéMeta>(key)
+		return async function * get (...args: Parameters<typeof provider>): AsyncIterable<T> {
+			const now = DateTime.now()
+			const meta = await repo.meta('current')
+			if (meta && DateTime.fromISO(meta.expiresAt) > now) {
+				return yield * repo.read('current')
 			}
-			yield item
+			const source = provider(...args)
+			const toWrite = new AsyncBuffer<T>(10)
+			const expiresAt = now.plus(policy)
+			const writing = repo.write('current', { expiresAt: expiresAt.toISO() }, toWrite.read())
+			for await (const item of source) {
+				try {
+					await toWrite.write(item)
+				} catch (e) {
+					console.error('GOT ERROR', e)
+				}
+				yield item
+			}
+			toWrite.done()
+			await writing
 		}
-		toWrite.done()
-		await writing
 	}
 }
+
+type Provider<T> = (...args: any[]) => AsyncIterable<T>

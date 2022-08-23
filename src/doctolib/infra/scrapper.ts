@@ -13,6 +13,8 @@ import { Départements, Département } from '../../domain/Département'
 import { lookahead, step, toAsyncIt, uflatmap } from '../../domain/iterators'
 import { match as routeMatch } from 'path-to-regexp'
 import { Issue } from '../../domain/Issue'
+import { Scrapper } from '../../domain/scrapper'
+import Debug from 'debug'
 
 const CONFIG = YAML.parse(FS.readFileSync(Path.join(__dirname, 'config.yaml'), 'utf8'))
 const COOLDOWN = 1
@@ -28,11 +30,6 @@ interface Motive {
 }
 type Vaccine = 'AstraZeneca' | 'Pfizer-BioNTech' | 'Moderna' | 'Janssen'
 
-interface DateRange {
-  from: string
-  to: string
-}
-
 export interface DoctolibCentre extends Centre {
 	url: string
 	id: string
@@ -40,13 +37,11 @@ export interface DoctolibCentre extends Centre {
 	practice?: string
 }
 
-interface CréneauxScrapper<C extends Centre> {
-	trouverLesCréneaux(centre: C, range: Interval): AsyncGenerator<Créneau | Issue>
-}
-
-export class DoctolibScrapper implements CréneauxScrapper<DoctolibCentre> {
+export class DoctolibScrapper implements Scrapper<DoctolibCentre> {
 	private client: AxiosInstance
+	private debug: ReturnType<typeof Debug>
 	constructor (private config = CONFIG) {
+		this.debug = Debug('scrapper:doctolib')
 		this.client = Axios.create({
 			httpAgent: new Http.Agent({ keepAlive: true, maxSockets: 100 }),
 			httpsAgent: new Https.Agent({ keepAlive: true, maxSockets: 100 }),
@@ -174,7 +169,7 @@ export class DoctolibScrapper implements CréneauxScrapper<DoctolibCentre> {
 
 	private async * départementDoctors (département: Département): AsyncIterable<Record<'link', string>> {
 		const getPage = (page: number) => this.get(`/vaccination-covid-19/${this.slugify(département)}.json`, { page })
-			.catch((e) => {
+			.catch((_) => {
 				console.error('ERROR while fetching doctors for', département)
 				return { data: {} }
 			})
@@ -212,11 +207,11 @@ export class DoctolibScrapper implements CréneauxScrapper<DoctolibCentre> {
 		let response: AxiosResponse
 		try {
 			response = await this.client.get(url)
-			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
+			this.debug('GET ', url, ' --> ', Date.now() - start, 'ms')
 			await delay(COOLDOWN)
 			return response
 		} catch (e) {
-			console.log('GET ', url, ' --> ', Date.now() - start, 'ms')
+			this.debug('GET ', url, ' --> ', Date.now() - start, 'ms')
 			throw e
 		}
 	}

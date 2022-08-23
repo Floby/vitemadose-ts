@@ -1,14 +1,14 @@
+/* eslint-disable no-console */
 import { DateTime, Interval } from 'luxon'
-import { DoctolibCentre, DoctolibScrapper } from '../doctolib/infra/scrapper'
+import { DoctolibScrapper } from '../doctolib/infra/scrapper'
 import humanizeDuration from 'humanize-duration'
-import { uflatmap } from '../domain/iterators'
 import { Issue } from '../domain/Issue'
 import Chalk from 'chalk'
-import yargs from 'yargs'
 import { Créneau } from '../domain/Créneau'
 import { LocalFileRepository } from '../infra/LocalFileRepository'
-import { Cacher } from '../domain/Cacher'
-import { Unpack } from '../domain/types'
+import { CachingScrapper } from '../domain/CachingScrapper'
+import { Scrap } from '../domain/Scrap'
+import Debug from 'debug'
 
 const CONCURRENCY = 100
 
@@ -16,52 +16,38 @@ main()
 async function main () {
 	const from = DateTime.now().startOf('day')
 	const range = Interval.fromDateTimes(from, from.plus({ days: 15 }))
-	const scrapper = new DoctolibScrapper()
-
-	const repo = new LocalFileRepository<DoctolibCentre, any>('./tmp/scrap')
-	const cache = Cacher(repo, () => scrapper.trouverLesCentres())
-	const centres = cache(range.start.toISODate())
+	const repo = new LocalFileRepository('./tmp/scrap')
+	const créneaux = Scrap(CONCURRENCY, new CachingScrapper('doctolib', repo, new DoctolibScrapper(), { centres: { hours: 6 } }))
 
 	let count = 0
 	let issue = 0
+	const group = 500
 	const start = Date.now()
 	const dates: Record<string, number> = {}
 	const weird: Créneau[] = []
-	for await (const slot of uflatmap(CONCURRENCY, centres, (centre) => scrapper.trouverLesCréneaux(centre, range))) {
-		if (slot instanceof Issue) {
-			console.error(Chalk.red('Encountered issue'), Chalk.red.bold(slot.message), slot.meta.error)
-			// console.dir(slot.meta.centre)
-			// console.dir(slot.meta.json, { depth: null })
-			// console.log(slot.meta.e)
-			// return process.exit(1)
+	for await (const créneau of créneaux(range)) {
+		if (créneau instanceof Issue) {
+			Debug('scrap')(Chalk.red('Encountered issue'), Chalk.red.bold(créneau.message), créneau.meta.error)
 			++issue
+			process.stdout.write(Chalk.red('x'))
 		} else {
 			++count
-			const date = slot.horaire.toISODate()
+			const date = créneau.horaire.toISODate()
 			if (date === null) {
-				weird.push(slot)
+				weird.push(créneau)
 			}
 			if (!dates[date]) { dates[date] = 0 }
 			dates[date] += 1
+			if (count % group === 0) { process.stdout.write('.') }
 		}
+		if ((count / group + issue) % 80 === 0) { process.stdout.write('\n') }
 	}
+	process.stdout.write('\n')
 	const duration = humanizeDuration(Date.now() - start)
 	await new Promise((resolve) => setTimeout(resolve, 1000))
-	console.log('Found %d slots in the next %d days and encountered %d issues in %s', count, range.toDuration().as('days'), issue, duration)
+	console.log('Found %d slots in the next %d days and encountered %d issues in %s', count, Math.floor(range.toDuration().as('days')), issue, duration)
 	for (const date of Object.keys(dates).sort()) {
 		console.log(date, dates[date])
 	}
 	console.log('weird', weird)
-}
-
-async function * take<T> (count: number, source: AsyncIterable<T>): AsyncIterable<T> {
-	let remaining = count
-	for await (const item of source) {
-		if (remaining > 0) {
-			yield item
-			remaining--
-		} else {
-			break
-		}
-	}
 }

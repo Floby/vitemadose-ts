@@ -154,3 +154,15 @@ export async function collect<T> (iterator: AsyncIterable<T>): Promise<Array<T>>
 	}
 	return buffer
 }
+
+export async function * take<T> (count: number, source: AsyncIterable<T>): AsyncIterable<T> {
+	let remaining = count
+	for await (const item of source) {
+		if (remaining > 0) {
+			yield item
+			remaining--
+		} else {
+			break
+		}
+	}
+}

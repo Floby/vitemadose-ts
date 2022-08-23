@@ -1,5 +1,5 @@
 import { collect, toAsyncIt } from '../../src/domain/iterators'
-import { LocalFileRepository } from '../../src/infra/LocalFileRepository'
+import { ConcreteLocalFileRepository, LocalFileRepository } from '../../src/infra/LocalFileRepository'
 import { expect } from 'chai'
 import Path = require('path')
 import Del = require('del')
@@ -12,15 +12,14 @@ describe('LocalFileRepository', () => {
 	beforeEach(async () => {
 		directory = Path.join(__dirname, randomName())
 	})
-	let repo: LocalFileRepository<Item, Meta>
-	beforeEach(() => { repo = new LocalFileRepository<Item, Meta>(directory) })
+	let repo: ConcreteLocalFileRepository<Item, Meta>
+	beforeEach(() => { repo = new LocalFileRepository(directory).prefix<Item, Meta>('test') })
 	afterEach(() => Del(directory))
 	context('when no data is present', () => {
 		describe('.meta(key)', () => {
 			it('resolves null', async () => {
 				// Given
 				const key = 'aaa'
-				const repo = new LocalFileRepository<Item, Meta>(directory)
 				// When
 				const actual = await repo.meta(key)
 				// Then
@@ -31,7 +30,6 @@ describe('LocalFileRepository', () => {
 			it('throws', async () => {
 				// Given
 				const key = 'aaa'
-				const repo = new LocalFileRepository<Item, Meta>(directory)
 				// When
 				try {
 					for await (const _ of repo.read(key)) {
@@ -52,7 +50,6 @@ describe('LocalFileRepository', () => {
 				// Given
 				const key = 'aaa'
 				const meta = { hello: 'goodbye' }
-				const repo = new LocalFileRepository<Item, Meta>(directory)
 				const source = toAsyncIt([
 					{ id: 'a', name: 'A ' },
 					{ id: 'b', name: 'B ' },

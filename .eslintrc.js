@@ -28,8 +28,20 @@ module.exports = {
 		'no-tabs': 'off',
 		'no-console': 'error',
 		'mocha/no-exclusive-tests': 'error',
+		'@typescript-eslint/no-namespace': 'off',
+		'no-useless-constructor': 'off',
+		'@typescript-eslint/no-useless-constructor': 'error',
 		'no-use-before-define': 'off',
-		'@typescript-eslint/no-use-before-define': ['error', { typedefs: false, functions: false }],
-		'@typescript-eslint/no-namespace': 'off'
+		'@typescript-eslint/no-use-before-define': ['error', {
+			functions: false,
+			classes: false,
+			variables: true,
+			allowNamedExports: true,
+			ignoreTypeReferences: true
+		}],
+		'@typescript-eslint/no-unused-vars': ['error', {
+			varsIgnorePattern: '^_',
+			argsIgnorePattern: '^_'
+		}]
 	}
 }
