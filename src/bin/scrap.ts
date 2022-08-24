@@ -17,8 +17,8 @@ async function main () {
 		console.log(CONFIG.helpString())
 		process.exit()
 	}
-	const from = DateTime.now().startOf('day')
-	const range = Interval.fromDateTimes(from, from.plus({ days: 15 }))
+	const today = DateTime.now().startOf('day')
+	const range = Interval.fromDateTimes(today, today.plus({ days: 15 }))
 	const repo = new LocalFileRepository('./tmp/scrap')
 	const créneaux = Scrap(CONFIG.get('CONCURRENCY'), new CachingScrapper('doctolib', repo, new DoctolibScrapper(), { centres: { hours: 6 } }))
 
@@ -28,6 +28,7 @@ async function main () {
 	const start = Date.now()
 	const dates: Record<string, number> = {}
 	const weird: Créneau[] = []
+
 	for await (const créneau of créneaux(range)) {
 		if (créneau instanceof Issue) {
 			Debug('scrap')(Chalk.red('Encountered issue'), Chalk.red.bold(créneau.message), créneau.meta.error)
@@ -46,8 +47,8 @@ async function main () {
 		if ((count / group + issue) % 80 === 0) { process.stdout.write('\n') }
 	}
 	process.stdout.write('\n')
+
 	const duration = humanizeDuration(Date.now() - start)
-	await new Promise((resolve) => setTimeout(resolve, 1000))
 	console.log('Found %d slots in the next %d days and encountered %d issues in %s', count, Math.floor(range.toDuration().as('days')), issue, duration)
 	for (const date of Object.keys(dates).sort()) {
 		console.log(date, dates[date])

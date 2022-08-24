@@ -18,7 +18,7 @@ import Debug from 'debug'
 import CONFIG from '../../config'
 
 const DOCTOLIB_CONFIG = YAML.parse(FS.readFileSync(Path.join(__dirname, 'config.yaml'), 'utf8'))
-const COOLDOWN = 1
+const COOLDOWN = 100
 
 interface Centre {
 	id: string
@@ -151,7 +151,7 @@ export class DoctolibScrapper implements Scrapper<DoctolibCentre> {
 
 	async * trouverLesCentres (): AsyncIterable<DoctolibCentre> {
 		const déjàVu = new Set<string>()
-		for await (const doctor of uflatmap(20, toAsyncIt(Object.values(Départements)), (d) => this.départementDoctors(d))) {
+		for await (const doctor of uflatmap(20, Object.values(Départements), (d) => this.départementDoctors(d))) {
 			if (déjàVu.has(doctor.link)) { continue }
 			déjàVu.add(doctor.link)
 			const link = this.matchLink(doctor.link)
@@ -186,7 +186,7 @@ export class DoctolibScrapper implements Scrapper<DoctolibCentre> {
 	}
 
 	private static MATCH_LINK = routeMatch<Record<'spec'|'ville'|'id', string>>('/:spec/:ville/:id')
-	private matchLink (link: string): Record<'spec'|'ville'|'id', string> | undefined {
+	private matchLink (link: string) {
 		const match = DoctolibScrapper.MATCH_LINK(link)
 		if (match) {
 			return match.params
