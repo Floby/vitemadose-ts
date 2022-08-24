@@ -15,8 +15,9 @@ import { match as routeMatch } from 'path-to-regexp'
 import { Issue } from '../../domain/Issue'
 import { Scrapper } from '../../domain/scrapper'
 import Debug from 'debug'
+import CONFIG from '../../config'
 
-const CONFIG = YAML.parse(FS.readFileSync(Path.join(__dirname, 'config.yaml'), 'utf8'))
+const DOCTOLIB_CONFIG = YAML.parse(FS.readFileSync(Path.join(__dirname, 'config.yaml'), 'utf8'))
 const COOLDOWN = 1
 
 interface Centre {
@@ -40,14 +41,14 @@ export interface DoctolibCentre extends Centre {
 export class DoctolibScrapper implements Scrapper<DoctolibCentre> {
 	private client: AxiosInstance
 	private debug: ReturnType<typeof Debug>
-	constructor (private config = CONFIG) {
+	constructor (private config = DOCTOLIB_CONFIG) {
 		this.debug = Debug('scrapper:doctolib')
 		this.client = Axios.create({
 			httpAgent: new Http.Agent({ keepAlive: true, maxSockets: 100 }),
 			httpsAgent: new Https.Agent({ keepAlive: true, maxSockets: 100 }),
 			baseURL: 'https://partners.doctolib.fr',
 			headers: {
-				'User-Agent': '<censored>',
+				'User-Agent': CONFIG.get('DOCTOLIB_API_KEY'),
 				Accept: 'application/json'
 			}
 		})

@@ -26,6 +26,7 @@
     "csv-parse": "^5.3.0",
     "debug": "^4.3.4",
     "del": "^6.1.1",
+    "envie": "^4.1.1",
     "humanize-duration": "^3.27.2",
     "luxon": "^3.0.1",
     "make-dir": "^3.1.0",
