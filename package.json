@@ -6,8 +6,7 @@
   "scripts": {
     "test": "mocha -r ts-node/register 'test/**/*.ts'",
     "build": "tsc --build",
-    "start": "node dist/bin/server.js",
-    "dev": "tsc-watch --build --incremental --onSuccess 'npm start' --noClear",
+    "start": "ts-node src/bin/scrap.ts",
     "lint": "eslint '{src,test}/**/*.ts'"
   },
   "repository": {
@@ -26,6 +25,7 @@
     "csv-parse": "^5.3.0",
     "debug": "^4.3.4",
     "del": "^6.1.1",
+    "dotenv": "^16.0.1",
     "envie": "^4.1.1",
     "humanize-duration": "^3.27.2",
     "luxon": "^3.0.1",

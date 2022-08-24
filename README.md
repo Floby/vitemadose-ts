@@ -21,8 +21,14 @@ Builder
 Lancer
 ------
 
+La commande lance un scrap complet
+
     $ npm start
 
-Pour lancer en mode développement
+Afficher l'aide
 
-    $ npm run dev
+    $ npm start help
+
+Surcharger certains paramètres
+
+    $ npm start CONCURRENCY=10

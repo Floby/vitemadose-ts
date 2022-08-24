@@ -9,15 +9,18 @@ import { LocalFileRepository } from '../infra/LocalFileRepository'
 import { CachingScrapper } from '../domain/CachingScrapper'
 import { Scrap } from '../domain/Scrap'
 import Debug from 'debug'
-
-const CONCURRENCY = 100
+import CONFIG, { needsHelp } from '../config'
 
 main()
 async function main () {
+	if (needsHelp()) {
+		console.log(CONFIG.helpString())
+		process.exit()
+	}
 	const from = DateTime.now().startOf('day')
 	const range = Interval.fromDateTimes(from, from.plus({ days: 15 }))
 	const repo = new LocalFileRepository('./tmp/scrap')
-	const créneaux = Scrap(CONCURRENCY, new CachingScrapper('doctolib', repo, new DoctolibScrapper(), { centres: { hours: 6 } }))
+	const créneaux = Scrap(CONFIG.get('CONCURRENCY'), new CachingScrapper('doctolib', repo, new DoctolibScrapper(), { centres: { hours: 6 } }))
 
 	let count = 0
 	let issue = 0
